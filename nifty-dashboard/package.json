@@ -1,0 +1,13 @@
+{
+  "name": "nifty-dashboard",
+  "version": "1.0.0",
+  "description": "Live Nifty 50 Dashboard with 10-year historical data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

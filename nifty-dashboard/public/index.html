@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Live Nifty 50 Index Dashboard with 10-year historical data, real-time prices, and interactive charts">
+  <title>Nifty 50 Live Dashboard | Real-Time Index Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Animated background -->
+  <div class="bg-grid"></div>
+  <div class="glow glow-1"></div>
+  <div class="glow glow-2"></div>
+  <div class="glow glow-3"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header id="dashboard-header">
+      <div class="header-left">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M4 20L10 12L16 16L24 6" stroke="url(#grad1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 20L10 12L16 16L24 6" stroke="url(#grad1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3" filter="blur(4px)"/>
+              <defs>
+                <linearGradient id="grad1" x1="4" y1="20" x2="24" y2="6">
+                  <stop stop-color="#6366f1"/>
+                  <stop offset="1" stop-color="#06b6d4"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <div class="title-container">
+            <h1 id="main-title">NIFTY 50</h1>
+            <span class="subtitle" id="main-subtitle">NSE India · Real-Time Index</span>
+          </div>
+          <div class="asset-selector" style="margin-left: 20px;">
+            <select id="symbol-select" style="background: rgba(15, 18, 30, 0.6); color: #f1f5f9; border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; padding: 6px 12px; font-family: 'Inter', sans-serif; cursor: pointer; outline: none;">
+              <optgroup label="Indices">
+                <option value="^NSEI" data-title="NIFTY 50" data-subtitle="NSE India · Real-Time Index">Nifty 50</option>
+                <option value="^BSESN" data-title="SENSEX" data-subtitle="BSE India · Real-Time Index">Sensex</option>
+                <option value="^IXIC" data-title="NASDAQ" data-subtitle="US · Composite Index">NASDAQ</option>
+              </optgroup>
+              <optgroup label="Metals">
+                <option value="GC=F" data-title="Gold" data-subtitle="COMEX · Futures">Gold</option>
+                <option value="SI=F" data-title="Silver" data-subtitle="COMEX · Futures">Silver</option>
+              </optgroup>
+              <optgroup label="Stocks">
+                <option value="RELIANCE.NS" data-title="Reliance Industries" data-subtitle="NSE India · Equity">Reliance</option>
+                <option value="TCS.NS" data-title="TCS" data-subtitle="NSE India · Equity">TCS</option>
+                <option value="INFY.NS" data-title="Infosys" data-subtitle="NSE India · Equity">Infosys</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="market-status" id="market-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Checking...</span>
+        </div>
+        <div class="last-updated" id="last-updated">--</div>
+      </div>
+    </header>
+
+    <!-- Price Section -->
+    <section class="price-section" id="price-section">
+      <div class="price-card glass-card">
+        <div class="price-main">
+          <div class="current-price-wrapper">
+            <span class="currency-label">₹</span>
+            <span class="current-price" id="current-price">--</span>
+          </div>
+          <div class="price-change-wrapper" id="price-change-wrapper">
+            <div class="price-change" id="price-change">
+              <span class="change-icon" id="change-icon">▲</span>
+              <span id="change-value">--</span>
+            </div>
+            <div class="price-change-pct" id="price-change-pct">--</div>
+          </div>
+        </div>
+        <div class="price-details">
+          <div class="detail-item">
+            <span class="detail-label">Open</span>
+            <span class="detail-value" id="price-open">--</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">High</span>
+            <span class="detail-value" id="price-high">--</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Low</span>
+            <span class="detail-value" id="price-low">--</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Prev Close</span>
+            <span class="detail-value" id="price-prev-close">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Cards -->
+      <div class="stats-grid">
+        <div class="stat-card glass-card" id="stat-52w-high">
+          <div class="stat-icon high">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">52W High</span>
+            <span class="stat-value" id="week52-high">--</span>
+          </div>
+        </div>
+        <div class="stat-card glass-card" id="stat-52w-low">
+          <div class="stat-icon low">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">52W Low</span>
+            <span class="stat-value" id="week52-low">--</span>
+          </div>
+        </div>
+        <div class="stat-card glass-card" id="stat-volume">
+          <div class="stat-icon volume">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">Volume</span>
+            <span class="stat-value" id="volume">--</span>
+          </div>
+        </div>
+        <div class="stat-card glass-card" id="stat-day-range">
+          <div class="stat-icon range">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6l4-4 4 4M8 18l4 4 4-4M12 2v20"/></svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">Day Range</span>
+            <span class="stat-value" id="day-range">--</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chart Section -->
+    <section class="chart-section" id="chart-section">
+      <div class="chart-card glass-card">
+        <div class="chart-header">
+          <h2>Historical Performance</h2>
+          <div class="timeframe-buttons" id="timeframe-buttons">
+            <button class="tf-btn" data-range="1d" data-interval="5m">1D</button>
+            <button class="tf-btn" data-range="5d" data-interval="15m">5D</button>
+            <button class="tf-btn" data-range="1mo" data-interval="1d">1M</button>
+            <button class="tf-btn" data-range="6mo" data-interval="1d">6M</button>
+            <button class="tf-btn" data-range="1y" data-interval="1wk">1Y</button>
+            <button class="tf-btn" data-range="5y" data-interval="1wk">5Y</button>
+            <button class="tf-btn active" data-range="10y" data-interval="1wk">10Y</button>
+            <button class="tf-btn" data-range="max" data-interval="1mo">MAX</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <div class="chart-loading" id="chart-loading">
+            <div class="spinner"></div>
+            <span>Loading chart data...</span>
+          </div>
+          <canvas id="price-chart"></canvas>
+        </div>
+        <div class="chart-footer" id="chart-footer">
+          <div class="chart-stat">
+            <span class="chart-stat-label">Period Return</span>
+            <span class="chart-stat-value" id="period-return">--</span>
+          </div>
+          <div class="chart-stat">
+            <span class="chart-stat-label">Period High</span>
+            <span class="chart-stat-value" id="period-high">--</span>
+          </div>
+          <div class="chart-stat">
+            <span class="chart-stat-label">Period Low</span>
+            <span class="chart-stat-value" id="period-low">--</span>
+          </div>
+          <div class="chart-stat">
+            <span class="chart-stat-label">Data Points</span>
+            <span class="chart-stat-value" id="data-points">--</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Intraday Chart -->
+    <section class="chart-section" id="intraday-section">
+      <div class="chart-card glass-card">
+        <div class="chart-header">
+          <h2>Today's Movement</h2>
+          <div class="live-badge" id="live-badge">
+            <span class="live-dot"></span>
+            LIVE
+          </div>
+        </div>
+        <div class="chart-container chart-container-small">
+          <canvas id="intraday-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>Data provided by Yahoo Finance · Updates every 15 seconds during market hours</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
