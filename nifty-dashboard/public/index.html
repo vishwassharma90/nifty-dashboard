@@ -84,6 +84,19 @@
             </div>
             <div class="price-change-pct" id="price-change-pct">--</div>
           </div>
+          <div class="recommendation-container">
+            <div class="recommendation-badge neutral" id="recommendation-badge">
+              <span class="rec-dot"></span>
+              <span id="recommendation-text">ANALYZING</span>
+              <div class="rec-info-icon" title="View technical scoring breakdown">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              </div>
+            </div>
+            <div class="score-breakdown glass-card hidden" id="score-breakdown">
+              <div class="sb-header">Technical Consensus</div>
+              <div class="sb-items" id="sb-items"></div>
+            </div>
+          </div>
         </div>
         <div class="price-details">
           <div class="detail-item">
@@ -141,6 +154,58 @@
           <div class="stat-info">
             <span class="stat-label">Day Range</span>
             <span class="stat-value" id="day-range">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fundamental Data -->
+      <div class="section-container mt-4">
+        <h3 class="section-subtitle">Fundamental Data</h3>
+        <div class="fundamentals-grid">
+          <div class="fund-card glass-card">
+            <span class="fund-label">Market Cap</span>
+            <span class="fund-value" id="fund-mktCap">...</span>
+          </div>
+          <div class="fund-card glass-card">
+            <span class="fund-label">P/E Ratio</span>
+            <span class="fund-value" id="fund-pe">...</span>
+          </div>
+          <div class="fund-card glass-card">
+            <span class="fund-label">EPS (TTM)</span>
+            <span class="fund-value" id="fund-eps">...</span>
+          </div>
+          <div class="fund-card glass-card">
+            <span class="fund-label">Div Yield</span>
+            <span class="fund-value" id="fund-divYield">...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Technical Indicators -->
+      <div class="section-container mt-4">
+        <h3 class="section-subtitle">Technical Indicators (1Y)</h3>
+        <div class="tech-grid">
+          <div class="tech-card glass-card">
+            <div class="tech-header">
+              <span class="tech-label">RSI (14)</span>
+              <span class="tech-badge" id="tech-rsi-badge">...</span>
+            </div>
+            <span class="tech-value" id="tech-rsi">...</span>
+          </div>
+          <div class="tech-card glass-card">
+            <div class="tech-header">
+              <span class="tech-label">MACD (12,26,9)</span>
+              <span class="tech-badge" id="tech-macd-badge">...</span>
+            </div>
+            <span class="tech-value" id="tech-macd">...</span>
+          </div>
+          <div class="tech-card glass-card">
+            <span class="tech-label">SMA (50)</span>
+            <span class="tech-value" id="tech-sma50">...</span>
+          </div>
+          <div class="tech-card glass-card">
+            <span class="tech-label">SMA (200)</span>
+            <span class="tech-value" id="tech-sma200">...</span>
           </div>
         </div>
       </div>

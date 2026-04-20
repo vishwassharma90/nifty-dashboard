@@ -28,6 +28,56 @@ function formatVolume(num) {
   return num.toString();
 }
 
+// ===== Technical Indicators Math =====
+function calculateSMA(data, period) {
+  if (!data || data.length < period) return null;
+  const slice = data.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+function calculateEMA(data, period) {
+  if (!data || data.length < period) return null;
+  const k = 2 / (period + 1);
+  let ema = data[0];
+  for (let i = 1; i < data.length; i++) {
+    ema = (data[i] * k) + (ema * (1 - k));
+  }
+  return ema;
+}
+
+function calculateRSI(data, period = 14) {
+  if (!data || data.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= period; i++) {
+    let diff = data[i] - data[i - 1];
+    if (diff >= 0) gains += diff; else losses -= diff;
+  }
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  for (let i = period + 1; i < data.length; i++) {
+    let diff = data[i] - data[i - 1];
+    avgGain = (avgGain * (period - 1) + (diff >= 0 ? diff : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+  }
+  return avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+}
+
+function calculateMACD(data) {
+  if (!data || data.length < 26) return { macdLine: null, signalLine: null };
+  const ema12 = [];
+  const ema26 = [];
+  let e12 = data[0], e26 = data[0];
+  const k12 = 2/13, k26 = 2/27;
+  for (let i = 1; i < data.length; i++) {
+    e12 = (data[i] - e12) * k12 + e12;
+    e26 = (data[i] - e26) * k26 + e26;
+    ema12.push(e12); ema26.push(e26);
+  }
+  const macdLineArr = ema12.map((v, i) => v - ema26[i]);
+  const signalLine = calculateEMA(macdLineArr, 9);
+  return { macdLine: macdLineArr[macdLineArr.length - 1], signalLine };
+}
+
 function isMarketOpen() {
   const now = new Date();
   const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
@@ -317,7 +367,7 @@ async function fetchHistoricalData(range = '10y', interval = '1wk') {
 
   try {
     const symbol = getCurrentSymbol();
-    const response = await fetch(`/api/chart?range=${range}&interval=${interval}&symbol=${encodeURIComponent(symbol)}`);
+    const response = await fetch(`/api/chart?range=${range}&interval=${interval}&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`);
     const data = await response.json();
 
     if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
@@ -368,34 +418,65 @@ async function fetchHistoricalData(range = '10y', interval = '1wk') {
   }
 }
 
-async function fetchLivePrice() {
+async function fetchIntradayData() {
   try {
     const symbol = getCurrentSymbol();
-    const response = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}`);
+    const response = await fetch(`/api/chart?range=1d&interval=1m&symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`);
     const data = await response.json();
 
-    if (!data.chart || !data.chart.result || data.chart.result.length === 0) {
-      console.error('No live data');
-      return;
-    }
+    if (!data.chart || !data.chart.result || data.chart.result.length === 0) return;
 
     const result = data.chart.result[0];
-    const meta = result.meta;
     const quotes = result.indicators ? result.indicators.quote[0] : {};
     const timestamps = result.timestamp || [];
 
-    const currentPrice = meta.regularMarketPrice;
-    const previousClose = meta.chartPreviousClose || meta.previousClose;
-    const change = currentPrice - previousClose;
-    const changePct = (change / previousClose * 100);
+    const intradayLabels = [];
+    const intradayPrices = [];
+
+    for (let i = 0; i < timestamps.length; i++) {
+      if (quotes.close[i] != null) {
+        intradayLabels.push(new Date(timestamps[i] * 1000));
+        intradayPrices.push(quotes.close[i]);
+      }
+    }
+
+    if (intradayPrices.length > 0) {
+      createIntradayChart(intradayLabels, intradayPrices);
+    }
+  } catch (error) {
+    console.error('Error fetching intraday data:', error);
+  }
+}
+
+async function fetchLivePrice() {
+  try {
+    const symbol = getCurrentSymbol();
+    const response = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`);
+    const data = await response.json();
+
+    if (!data || data.error) {
+      console.error('No live snapshot data');
+      return;
+    }
+
+    // New structure from yahoo-finance2.quote() is a flat object
+    const currentPrice = data.regularMarketPrice;
+    const previousClose = data.regularMarketPreviousClose || data.previousClose;
+    const change = data.regularMarketChange || (currentPrice - previousClose);
+    const changePct = data.regularMarketChangePercent || (change / previousClose * 100);
 
     // Determine currency symbol based on asset
-    const currency = meta.currency || 'INR';
+    const currency = data.currency || 'INR';
     const currencySymbol = currency === 'USD' ? '$' : currency === 'INR' ? '₹' : currency + ' ';
 
     // Update current price with flash animation
     const priceEl = document.getElementById('current-price');
-    if (previousPrice !== null && currentPrice !== previousPrice) {
+    
+    // Precise comparison to catch sub-decimal changes
+    const hasChanged = previousPrice !== null && 
+                      Math.abs(currentPrice - previousPrice) > 0.0001; 
+
+    if (hasChanged) {
       priceEl.classList.remove('price-flash-up', 'price-flash-down');
       void priceEl.offsetWidth; // Force reflow
       priceEl.classList.add(currentPrice > previousPrice ? 'price-flash-up' : 'price-flash-down');
@@ -421,65 +502,30 @@ async function fetchLivePrice() {
     changeValue.textContent = `${Math.abs(change).toFixed(2)}`;
     changePctEl.textContent = `${change >= 0 ? '+' : ''}${changePct.toFixed(2)}%`;
 
-    // Always update stats from meta (available for all symbols)
-    let dayHigh = meta.regularMarketDayHigh;
-    let dayLow = meta.regularMarketDayLow;
-    let dayOpen = meta.regularMarketOpen;
-    let totalVolume = meta.regularMarketVolume;
+    // Always update stats from the snapshot (standard fields)
+    const dayHigh = data.regularMarketDayHigh;
+    const dayLow = data.regularMarketDayLow;
+    const dayOpen = data.regularMarketOpen;
+    const totalVolume = data.regularMarketVolume;
 
-    // If intraday data is available, compute more accurate values from it
-    const hasIntradayData = timestamps.length > 0 && quotes && quotes.high;
-    if (hasIntradayData) {
-      const highs = (quotes.high || []).filter(v => v != null);
-      const lows = (quotes.low || []).filter(v => v != null);
-      const opens = (quotes.open || []).filter(v => v != null);
-      const volumes = (quotes.volume || []).filter(v => v != null);
-
-      if (highs.length > 0) dayHigh = Math.max(...highs);
-      if (lows.length > 0) dayLow = Math.min(...lows);
-      if (opens.length > 0) dayOpen = opens[0];
-      if (volumes.length > 0) totalVolume = volumes.reduce((a, b) => a + b, 0);
-    }
-
-    // Update detail cards (always, not just when intraday data exists)
+    // Update detail cards
     document.getElementById('price-open').textContent = dayOpen != null ? formatNumber(dayOpen) : '--';
     document.getElementById('price-high').textContent = dayHigh != null ? formatNumber(dayHigh) : '--';
     document.getElementById('price-low').textContent = dayLow != null ? formatNumber(dayLow) : '--';
     document.getElementById('price-prev-close').textContent = formatNumber(previousClose);
 
-    document.getElementById('week52-high').textContent = meta.fiftyTwoWeekHigh != null
-      ? `${currencySymbol}${formatNumber(meta.fiftyTwoWeekHigh)}` : '--';
-    document.getElementById('week52-low').textContent = meta.fiftyTwoWeekLow != null
-      ? `${currencySymbol}${formatNumber(meta.fiftyTwoWeekLow)}` : '--';
+    document.getElementById('week52-high').textContent = data.fiftyTwoWeekHigh != null
+      ? `${currencySymbol}${formatNumber(data.fiftyTwoWeekHigh)}` : '--';
+    document.getElementById('week52-low').textContent = data.fiftyTwoWeekLow != null
+      ? `${currencySymbol}${formatNumber(data.fiftyTwoWeekLow)}` : '--';
     document.getElementById('volume').textContent = totalVolume != null ? formatVolume(totalVolume) : '--';
     document.getElementById('day-range').textContent = (dayLow != null && dayHigh != null)
       ? `${formatNumber(dayLow, 0)} - ${formatNumber(dayHigh, 0)}` : '--';
 
-    // Update intraday chart (only if data exists)
-    if (hasIntradayData && quotes.close) {
-      const intradayLabels = [];
-      const intradayPrices = [];
-
-      for (let i = 0; i < timestamps.length; i++) {
-        if (quotes.close[i] != null) {
-          intradayLabels.push(new Date(timestamps[i] * 1000));
-          intradayPrices.push(quotes.close[i]);
-        }
-      }
-
-      if (intradayPrices.length > 0) {
-        createIntradayChart(intradayLabels, intradayPrices);
-      }
-    } else {
-      // No intraday data — clear the intraday chart
-      if (intradayChart) {
-        intradayChart.destroy();
-        intradayChart = null;
-      }
-      // Show a message in the intraday section
-      const intradayCanvas = document.getElementById('intraday-chart');
-      const ctx = intradayCanvas.getContext('2d');
-      ctx.clearRect(0, 0, intradayCanvas.width, intradayCanvas.height);
+    // Clear the intraday chart if we are only doing snapshot updates
+    // (A separate background task will refresh the intraday chart intermittently)
+    if (intradayChart && !hasChanged) {
+       // Only clear if absolutely necessary, but normally we just leave it as is
     }
 
     updateLastUpdated();
@@ -487,6 +533,136 @@ async function fetchLivePrice() {
   } catch (error) {
     console.error('Error fetching live data:', error);
   }
+}
+
+// ===== Analytical Features =====
+function updateRecommendation(currentPrice, rsi, macdLine, signalLine, sma50, sma200) {
+  let score = 0;
+  let breakdown = [];
+  
+  // RSI (1 pt)
+  let rsiScore = 0;
+  if (rsi != null) {
+    if (rsi < 30) rsiScore = 1; else if (rsi > 70) rsiScore = -1;
+    score += rsiScore;
+    breakdown.push({ label: 'RSI (14)', val: rsi.toFixed(1), score: rsiScore });
+  }
+
+  // MACD (2 pts)
+  let macdScore = 0;
+  if (macdLine != null && signalLine != null) {
+    macdScore = macdLine > signalLine ? 2 : -2;
+    score += macdScore;
+    breakdown.push({ label: 'MACD Momentum', val: macdLine > signalLine ? 'Bull' : 'Bear', score: macdScore });
+  }
+
+  // SMA 50 (1 pt)
+  let sma50Score = 0;
+  if (sma50 != null) {
+    sma50Score = currentPrice > sma50 ? 1 : -1;
+    score += sma50Score;
+    breakdown.push({ label: 'Trend (SMA50)', val: currentPrice > sma50 ? 'Above' : 'Below', score: sma50Score });
+  }
+
+  // SMA Cross (2 pts)
+  let crossScore = 0;
+  if (sma50 != null && sma200 != null) {
+    crossScore = sma50 > sma200 ? 2 : -2;
+    score += crossScore;
+    breakdown.push({ label: 'SMA Cross', val: sma50 > sma200 ? 'Golden' : 'Death', score: crossScore });
+  }
+
+  // Update Score Breakdown UI
+  const sbItems = document.getElementById('sb-items');
+  if (sbItems) {
+    sbItems.innerHTML = breakdown.map(item => `
+      <div class="sb-item">
+        <span>${item.label}</span>
+        <span class="sb-score ${item.score > 0 ? 'plus' : (item.score < 0 ? 'minus' : '')}">
+          ${item.score > 0 ? '+' : ''}${item.score}
+        </span>
+      </div>
+    `).join('');
+  }
+
+  // Update Recommendation Badge
+  const badge = document.getElementById('recommendation-badge');
+  const text = document.getElementById('recommendation-text');
+  if (badge && text) {
+    if (score >= 4) { badge.className = 'recommendation-badge strong-buy'; text.textContent = 'Strong Buy'; }
+    else if (score >= 1) { badge.className = 'recommendation-badge buy'; text.textContent = 'Buy'; }
+    else if (score <= -4) { badge.className = 'recommendation-badge strong-sell'; text.textContent = 'Strong Sell'; }
+    else if (score <= -1) { badge.className = 'recommendation-badge sell'; text.textContent = 'Sell'; }
+    else { badge.className = 'recommendation-badge neutral'; text.textContent = 'Hold'; }
+  }
+
+  // Update Technical Grids
+  const updateEl = (id, val, badgeId, isBullish) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+    const b = document.getElementById(badgeId);
+    if (b) {
+      b.textContent = isBullish ? 'Bullish' : 'Bearish';
+      b.className = `tech-badge ${isBullish ? 'bullish' : 'bearish'}`;
+    }
+  };
+
+  if (rsi != null) updateEl('tech-rsi', rsi.toFixed(1), 'tech-rsi-badge', rsi < 50);
+  if (macdLine != null) updateEl('tech-macd', macdLine.toFixed(1), 'tech-macd-badge', macdLine > signalLine);
+  if (sma50 != null) document.getElementById('tech-sma50').textContent = formatNumber(sma50);
+  if (sma200 != null) document.getElementById('tech-sma200').textContent = formatNumber(sma200);
+}
+
+async function fetchTechnicalIndicators() {
+  try {
+    const symbol = getCurrentSymbol();
+    const res = await fetch(`/api/chart?range=1y&interval=1d&symbol=${encodeURIComponent(symbol)}`);
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    const closes = result?.indicators?.quote?.[0]?.close?.filter(c => c != null) || [];
+    
+    // Add real-time price point
+    const priceText = document.getElementById('current-price')?.textContent?.replace(/,/g, '');
+    const livePrice = parseFloat(priceText);
+    if (!isNaN(livePrice)) closes.push(livePrice);
+
+    if (closes.length < 2) return;
+
+    const currentPrice = closes[closes.length - 1];
+    const rsi = calculateRSI(closes, 14);
+    const sma50 = calculateSMA(closes, 50);
+    const sma200 = calculateSMA(closes, 200);
+    const { macdLine, signalLine } = calculateMACD(closes);
+
+    updateRecommendation(currentPrice, rsi, macdLine, signalLine, sma50, sma200);
+  } catch (err) { console.error('Failed to fetch indicators', err); }
+}
+
+async function fetchFundamentals() {
+  try {
+    const symbol = getCurrentSymbol();
+    const res = await fetch(`/api/fundamentals?symbol=${encodeURIComponent(symbol)}&t=${Date.now()}`);
+    const data = await res.json();
+    const summary = data?.summaryDetail || {};
+    const stats = data?.defaultKeyStatistics || {};
+
+    const update = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val != null ? val : 'N/A';
+    };
+
+    update('fund-mktCap', summary.marketCap ? formatVolume(summary.marketCap) : (stats.enterpriseValue ? formatVolume(stats.enterpriseValue) : 'N/A'));
+    
+    // P/E Ratio Fallback: check trailingPE, then forwardPE in both summary and stats
+    const pe = summary.trailingPE || summary.forwardPE || stats.forwardPE;
+    update('fund-pe', pe ? pe.toFixed(2) : 'N/A');
+    
+    // EPS Fallback: check trailingEps then forwardEps
+    const eps = stats.trailingEps || stats.forwardEps;
+    update('fund-eps', eps ? eps.toFixed(2) : 'N/A');
+    
+    update('fund-divYield', summary.dividendYield ? (summary.dividendYield * 100).toFixed(2) + '%' : 'N/A');
+  } catch (err) { console.error('Failed to fetch fundamentals', err); }
 }
 
 // ===== Event Listeners =====
@@ -526,9 +702,23 @@ function initEventListeners() {
       // Fetch new data
       await Promise.all([
         fetchHistoricalData(range, interval),
-        fetchLivePrice()
+        fetchLivePrice(),
+        fetchIntradayData(),
+        fetchTechnicalIndicators(),
+        fetchFundamentals()
       ]);
     });
+  }
+
+  // Add click listener for score breakdown
+  const badge = document.getElementById('recommendation-badge');
+  const breakdown = document.getElementById('score-breakdown');
+  if (badge && breakdown) {
+    badge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      breakdown.classList.toggle('hidden');
+    });
+    document.addEventListener('click', () => breakdown.classList.add('hidden'));
   }
 }
 
@@ -540,17 +730,23 @@ async function init() {
   // Fetch initial data
   await Promise.all([
     fetchHistoricalData('10y', '1wk'),
-    fetchLivePrice()
+    fetchLivePrice(),
+    fetchIntradayData(),
+    fetchTechnicalIndicators(),
+    fetchFundamentals()
   ]);
 
-  // Auto-refresh every 15 seconds
+  // Auto-refresh every 15 seconds (Price Only)
   refreshInterval = setInterval(() => {
     fetchLivePrice();
-    updateMarketStatus();
   }, 15000);
 
-  // Update market status every minute
-  setInterval(updateMarketStatus, 60000);
+  // Update logic for analysis/status every 60 seconds
+  setInterval(() => {
+    updateMarketStatus();
+    fetchTechnicalIndicators();
+    fetchIntradayData();
+  }, 60000);
 }
 
 // Start the app
